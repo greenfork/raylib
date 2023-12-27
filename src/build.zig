@@ -1,148 +1,165 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-// This has been tested to work with zig 0.11.0 and zig 0.12.0-dev.1390+94cee4fb2
-pub fn addRaylib(b: *std.Build, target: std.zig.CrossTarget, optimize: std.builtin.OptimizeMode, options: Options) *std.Build.CompileStep {
+// This has been tested to work with zig 0.11.0 and zig 0.12.0-dev.1834+f36ac227b
+pub fn addRaylib(
+    b: *std.Build,
+    target: std.zig.CrossTarget,
+    optimize: std.builtin.OptimizeMode,
+    options: Options,
+) *std.Build.CompileStep {
+    const lib = b.addStaticLibrary(.{
+        .name = "raylib",
+        .target = target,
+        .optimize = optimize,
+    });
+    addRaylibTo(b, lib, target, options);
+    return lib;
+}
+
+/// Generic function for an either dynamic, shared or object file that is passed to the `lib`
+/// variable, see `addRaylib` for an example.
+pub fn addRaylibTo(
+    b: *std.Build,
+    lib: *std.Build.CompileStep,
+    target: std.zig.CrossTarget,
+    options: Options,
+) void {
     const raylib_flags = &[_][]const u8{
         "-std=gnu99",
         "-D_GNU_SOURCE",
         "-DGL_SILENCE_DEPRECATION=199309L",
     };
 
-    const raylib = b.addStaticLibrary(.{
-        .name = "raylib",
-        .target = target,
-        .optimize = optimize,
-    });
-    raylib.linkLibC();
+    lib.linkLibC();
 
     // No GLFW required on PLATFORM_DRM
     if (!options.platform_drm) {
-        raylib.addIncludePath(.{ .path = srcdir ++ "/external/glfw/include" });
+        lib.addIncludePath(.{ .path = srcdir ++ "/external/glfw/include" });
     }
 
-    addCSourceFilesVersioned(raylib, &.{
+    addCSourceFilesVersioned(lib, &.{
         srcdir ++ "/rcore.c",
         srcdir ++ "/utils.c",
     }, raylib_flags);
 
     if (options.raudio) {
-        addCSourceFilesVersioned(raylib, &.{
+        addCSourceFilesVersioned(lib, &.{
             srcdir ++ "/raudio.c",
         }, raylib_flags);
     }
     if (options.rmodels) {
-        addCSourceFilesVersioned(raylib, &.{
+        addCSourceFilesVersioned(lib, &.{
             srcdir ++ "/rmodels.c",
         }, &[_][]const u8{
             "-fno-sanitize=undefined", // https://github.com/raysan5/raylib/issues/1891
         } ++ raylib_flags);
     }
     if (options.rshapes) {
-        addCSourceFilesVersioned(raylib, &.{
+        addCSourceFilesVersioned(lib, &.{
             srcdir ++ "/rshapes.c",
         }, raylib_flags);
     }
     if (options.rtext) {
-        addCSourceFilesVersioned(raylib, &.{
+        addCSourceFilesVersioned(lib, &.{
             srcdir ++ "/rtext.c",
         }, raylib_flags);
     }
     if (options.rtextures) {
-        addCSourceFilesVersioned(raylib, &.{
+        addCSourceFilesVersioned(lib, &.{
             srcdir ++ "/rtextures.c",
         }, raylib_flags);
     }
 
     var gen_step = b.addWriteFiles();
-    raylib.step.dependOn(&gen_step.step);
+    lib.step.dependOn(&gen_step.step);
 
     if (options.raygui) {
         const raygui_c_path = gen_step.add("raygui.c", "#define RAYGUI_IMPLEMENTATION\n#include \"raygui.h\"\n");
-        raylib.addCSourceFile(.{ .file = raygui_c_path, .flags = raylib_flags });
-        raylib.addIncludePath(.{ .path = srcdir });
-        raylib.addIncludePath(.{ .path = srcdir ++ "/../../raygui/src" });
+        lib.addCSourceFile(.{ .file = raygui_c_path, .flags = raylib_flags });
+        lib.addIncludePath(.{ .path = srcdir });
+        lib.addIncludePath(.{ .path = srcdir ++ "/../../raygui/src" });
     }
 
     switch (target.getOsTag()) {
         .windows => {
-            addCSourceFilesVersioned(raylib, &.{
+            addCSourceFilesVersioned(lib, &.{
                 srcdir ++ "/rglfw.c",
             }, raylib_flags);
-            raylib.linkSystemLibrary("winmm");
-            raylib.linkSystemLibrary("gdi32");
-            raylib.linkSystemLibrary("opengl32");
-            raylib.addIncludePath(.{ .path = "external/glfw/deps/mingw" });
+            lib.linkSystemLibrary("winmm");
+            lib.linkSystemLibrary("gdi32");
+            lib.linkSystemLibrary("opengl32");
+            lib.addIncludePath(.{ .path = "external/glfw/deps/mingw" });
 
-            raylib.defineCMacro("PLATFORM_DESKTOP", null);
+            lib.defineCMacro("PLATFORM_DESKTOP", null);
         },
         .linux => {
             if (!options.platform_drm) {
-                addCSourceFilesVersioned(raylib, &.{
+                addCSourceFilesVersioned(lib, &.{
                     srcdir ++ "/rglfw.c",
                 }, raylib_flags);
-                raylib.linkSystemLibrary("GL");
-                raylib.linkSystemLibrary("rt");
-                raylib.linkSystemLibrary("dl");
-                raylib.linkSystemLibrary("m");
-                raylib.linkSystemLibrary("X11");
-                raylib.addLibraryPath(.{ .path = "/usr/lib" });
-                raylib.addIncludePath(.{ .path = "/usr/include" });
+                lib.linkSystemLibrary("GL");
+                lib.linkSystemLibrary("rt");
+                lib.linkSystemLibrary("dl");
+                lib.linkSystemLibrary("m");
+                lib.linkSystemLibrary("X11");
+                lib.addLibraryPath(.{ .path = "/usr/lib" });
+                lib.addIncludePath(.{ .path = "/usr/include" });
 
-                raylib.defineCMacro("PLATFORM_DESKTOP", null);
+                lib.defineCMacro("PLATFORM_DESKTOP", null);
             } else {
-                raylib.linkSystemLibrary("GLESv2");
-                raylib.linkSystemLibrary("EGL");
-                raylib.linkSystemLibrary("drm");
-                raylib.linkSystemLibrary("gbm");
-                raylib.linkSystemLibrary("pthread");
-                raylib.linkSystemLibrary("rt");
-                raylib.linkSystemLibrary("m");
-                raylib.linkSystemLibrary("dl");
-                raylib.addIncludePath(.{ .path = "/usr/include/libdrm" });
+                lib.linkSystemLibrary("GLESv2");
+                lib.linkSystemLibrary("EGL");
+                lib.linkSystemLibrary("drm");
+                lib.linkSystemLibrary("gbm");
+                lib.linkSystemLibrary("pthread");
+                lib.linkSystemLibrary("rt");
+                lib.linkSystemLibrary("m");
+                lib.linkSystemLibrary("dl");
+                lib.addIncludePath(.{ .path = "/usr/include/libdrm" });
 
-                raylib.defineCMacro("PLATFORM_DRM", null);
-                raylib.defineCMacro("GRAPHICS_API_OPENGL_ES2", null);
-                raylib.defineCMacro("EGL_NO_X11", null);
-                raylib.defineCMacro("DEFAULT_BATCH_BUFFER_ELEMENT", "2048");
+                lib.defineCMacro("PLATFORM_DRM", null);
+                lib.defineCMacro("GRAPHICS_API_OPENGL_ES2", null);
+                lib.defineCMacro("EGL_NO_X11", null);
+                lib.defineCMacro("DEFAULT_BATCH_BUFFER_ELEMENT", "2048");
             }
         },
         .freebsd, .openbsd, .netbsd, .dragonfly => {
-            addCSourceFilesVersioned(raylib, &.{
+            addCSourceFilesVersioned(lib, &.{
                 srcdir ++ "/rglfw.c",
             }, raylib_flags);
-            raylib.linkSystemLibrary("GL");
-            raylib.linkSystemLibrary("rt");
-            raylib.linkSystemLibrary("dl");
-            raylib.linkSystemLibrary("m");
-            raylib.linkSystemLibrary("X11");
-            raylib.linkSystemLibrary("Xrandr");
-            raylib.linkSystemLibrary("Xinerama");
-            raylib.linkSystemLibrary("Xi");
-            raylib.linkSystemLibrary("Xxf86vm");
-            raylib.linkSystemLibrary("Xcursor");
+            lib.linkSystemLibrary("GL");
+            lib.linkSystemLibrary("rt");
+            lib.linkSystemLibrary("dl");
+            lib.linkSystemLibrary("m");
+            lib.linkSystemLibrary("X11");
+            lib.linkSystemLibrary("Xrandr");
+            lib.linkSystemLibrary("Xinerama");
+            lib.linkSystemLibrary("Xi");
+            lib.linkSystemLibrary("Xxf86vm");
+            lib.linkSystemLibrary("Xcursor");
 
-            raylib.defineCMacro("PLATFORM_DESKTOP", null);
+            lib.defineCMacro("PLATFORM_DESKTOP", null);
         },
         .macos => {
             // On macos rglfw.c include Objective-C files.
             const raylib_flags_extra_macos = &[_][]const u8{
                 "-ObjC",
             };
-            addCSourceFilesVersioned(raylib, &.{
+            addCSourceFilesVersioned(lib, &.{
                 srcdir ++ "/rglfw.c",
             }, raylib_flags ++ raylib_flags_extra_macos);
-            raylib.linkFramework("Foundation");
-            raylib.linkFramework("CoreServices");
-            raylib.linkFramework("CoreGraphics");
-            raylib.linkFramework("AppKit");
-            raylib.linkFramework("IOKit");
+            lib.linkFramework("Foundation");
+            lib.linkFramework("CoreServices");
+            lib.linkFramework("CoreGraphics");
+            lib.linkFramework("AppKit");
+            lib.linkFramework("IOKit");
 
-            raylib.defineCMacro("PLATFORM_DESKTOP", null);
+            lib.defineCMacro("PLATFORM_DESKTOP", null);
         },
         .emscripten => {
-            raylib.defineCMacro("PLATFORM_WEB", null);
-            raylib.defineCMacro("GRAPHICS_API_OPENGL_ES2", null);
+            lib.defineCMacro("PLATFORM_WEB", null);
+            lib.defineCMacro("GRAPHICS_API_OPENGL_ES2", null);
 
             if (b.sysroot == null) {
                 @panic("Pass '--sysroot \"$EMSDK/upstream/emscripten\"'");
@@ -154,14 +171,12 @@ pub fn addRaylib(b: *std.Build, target: std.zig.CrossTarget, optimize: std.built
             var dir = std.fs.openDirAbsolute(cache_include, std.fs.Dir.OpenDirOptions{ .access_sub_paths = true, .no_follow = true }) catch @panic("No emscripten cache. Generate it!");
             dir.close();
 
-            raylib.addIncludePath(.{ .path = cache_include });
+            lib.addIncludePath(.{ .path = cache_include });
         },
         else => {
             @panic("Unsupported OS");
         },
     }
-
-    return raylib;
 }
 
 pub const Options = struct {
@@ -196,17 +211,25 @@ pub fn build(b: *std.Build) void {
         .raygui = b.option(bool, "raygui", "Compile with raygui support") orelse defaults.raygui,
     };
 
-    const lib = addRaylib(b, target, optimize, options);
+    const static_lib = addRaylib(b, target, optimize, options);
+    const dynamic_lib = b.addSharedLibrary(.{
+        .name = "raylib",
+        .target = target,
+        .optimize = optimize,
+    });
+    addRaylibTo(b, dynamic_lib, target, options);
 
-    lib.installHeader("src/raylib.h", "raylib.h");
-    lib.installHeader("src/raymath.h", "raymath.h");
-    lib.installHeader("src/rlgl.h", "rlgl.h");
+    inline for (&[_]*std.Build.CompileStep{ static_lib, dynamic_lib }) |lib| {
+        lib.installHeader("src/raylib.h", "raylib.h");
+        lib.installHeader("src/raymath.h", "raymath.h");
+        lib.installHeader("src/rlgl.h", "rlgl.h");
 
-    if (options.raygui) {
-        lib.installHeader("../raygui/src/raygui.h", "raygui.h");
+        if (options.raygui) {
+            lib.installHeader("../raygui/src/raygui.h", "raygui.h");
+        }
+
+        b.installArtifact(lib);
     }
-
-    b.installArtifact(lib);
 }
 
 const srcdir = struct {
