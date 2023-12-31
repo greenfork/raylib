@@ -1340,6 +1340,7 @@ void UnloadShader(Shader shader)
 // Get shader uniform location
 int GetShaderLocation(Shader shader, const char *uniformName)
 {
+    TRACELOG(RL_LOG_INFO, "SHADER: [ID %i] Get shader location was passed '%s'", shader.id, uniformName);
     return rlGetLocationUniform(shader.id, uniformName);
 }
 

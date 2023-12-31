@@ -15,6 +15,7 @@
 ********************************************************************************************/
 
 #include "raylib.h"
+#include <stdio.h>
 
 #if defined(PLATFORM_DESKTOP)
     #define GLSL_VERSION            330
@@ -51,6 +52,8 @@ int main(void)
     int viewCenterLoc = GetShaderLocation(shader, "viewCenter");
     int runTimeLoc = GetShaderLocation(shader, "runTime");
     int resolutionLoc = GetShaderLocation(shader, "resolution");
+    // printf("viewEye: %d, viewCenter: %d, runTime: %d, resolution: %d\n",
+    // 	viewEyeLoc, viewCenterLoc, runTimeLoc, resolutionLoc);
 
     float resolution[2] = { (float)screenWidth, (float)screenHeight };
     SetShaderValue(shader, resolutionLoc, resolution, SHADER_UNIFORM_VEC2);
